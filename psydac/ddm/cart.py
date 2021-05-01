@@ -469,7 +469,8 @@ class CartDataExchanger:
     def update_ghost_regions( self, array, *, direction=None ):
         """
         Update ghost regions in a numpy array with dimensions compatible with
-        CartDecomposition (and coeff_shape) provided at initialization.
+        CartDecomposition (and coeff_shape) provided at initialization
+        using blocking communications.
 
         Parameters
         ----------
@@ -524,6 +525,68 @@ class CartDataExchanger:
 
         comm.Barrier()
 
+    def update_ghost_regions_non_blocking( self, array, *, direction=None ):
+        """
+        Update ghost regions in a numpy array with dimensions compatible with
+        CartDecomposition (and coeff_shape) provided at initialization
+        using non blocking communications.
+
+        Parameters
+        ----------
+        array : numpy.ndarray
+            Multidimensional array corresponding to local subdomain in
+            decomposed tensor grid, including padding.
+
+        direction : int
+            Index of dimension over which ghost regions should be updated
+            (optional: by default all ghost regions are updated).
+
+        """
+        if direction is None:
+            requests = []
+            for d in range( self._cart.ndim ):
+                requests += self.update_ghost_regions_non_blocking( array, direction=d )
+            return requests, self._comm.Ibarrier()
+
+        assert isinstance( array, np.ndarray )
+        assert isinstance( direction, int )
+
+        # Shortcuts
+        cart = self._cart
+        comm = self._comm
+
+        # Choose non-negative invertible function tag(disp) >= 0
+        # NOTES:
+        #   . different values of disp must return different tags!
+        #   . tag at receiver must match message tag at sender
+        tag = lambda disp: 42+disp
+
+        # Requests' handles
+        requests = []
+
+        # Start receiving data (MPI_IRECV)
+        for disp in [-1,1]:
+            info     = cart.get_shift_info( direction, disp )
+            recv_typ = self.get_recv_type ( direction, disp )
+            recv_buf = (array, 1, recv_typ)
+            recv_req = comm.Irecv( recv_buf, info['rank_source'], tag(disp) )
+            requests.append( recv_req )
+
+        # Start sending data (MPI_ISEND)
+        for disp in [-1,1]:
+            info     = cart.get_shift_info( direction, disp )
+            send_typ = self.get_send_type ( direction, disp )
+            send_buf = (array, 1, send_typ)
+            send_req = comm.Isend( send_buf, info['rank_dest'], tag(disp) )
+            requests.append( send_req )
+        return requests
+
+    def wait(self, requests):
+        # Wait for end of data exchange (MPI_WAITALL)
+        MPI.Request.Waitall( requests )
+
+    def barrier(self, barrier_req):
+        MPI.Request.Wait( barrier_req )
     #---------------------------------------------------------------------------
     # Private methods
     #---------------------------------------------------------------------------
