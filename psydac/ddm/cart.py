@@ -544,12 +544,9 @@ class CartDataExchanger:
         """
         if direction is None:
             recv_requests = []
-            send_requests = []
             for d in range( self._cart.ndim ):
-                r,s = self.update_ghost_regions_non_blocking( array, direction=d )
-                recv_requests += r
-                send_requests += s
-            return recv_requests, send_requests
+                recv_requests += self.update_ghost_regions_non_blocking( array, direction=d )
+            return recv_requests
 
         # Shortcuts
         cart = self._cart
@@ -563,7 +560,6 @@ class CartDataExchanger:
 
         # Requests' handles
         recv_requests = []
-        send_requests = []
 
         # Start receiving data (MPI_IRECV)
         for disp in [-1,1]:
@@ -578,9 +574,8 @@ class CartDataExchanger:
             info     = cart.get_shift_info( direction, disp )
             send_typ = self.get_send_type ( direction, disp )
             send_buf = (array, 1, send_typ)
-            send_req = comm.Isend( send_buf, info['rank_dest'], tag(disp) )
-            send_requests.append( send_req )
-        return recv_requests, send_requests
+            comm.Ibsend( send_buf, info['rank_dest'], tag(disp) )
+        return recv_requests
 
     def wait(self, requests):
         # Wait for end of data exchange (MPI_WAITALL)
