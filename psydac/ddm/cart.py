@@ -574,7 +574,7 @@ class CartDataExchanger:
             info     = cart.get_shift_info( direction, disp )
             send_typ = self.get_send_type ( direction, disp )
             send_buf = (array, 1, send_typ)
-            comm.Ibsend( send_buf, info['rank_dest'], tag(disp) )
+            comm.Bsend( send_buf, info['rank_dest'], tag(disp) )
         return recv_requests
 
     def wait(self, requests):
