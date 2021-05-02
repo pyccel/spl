@@ -525,7 +525,7 @@ class CartDataExchanger:
 
         comm.Barrier()
 
-    def update_ghost_regions_non_blocking( self, array, *, buffer=None, direction=None ):
+    def update_ghost_regions_non_blocking( self, array, *, direction=None ):
         """
         Update ghost regions in a numpy array with dimensions compatible with
         CartDecomposition (and coeff_shape) provided at initialization
@@ -543,11 +543,13 @@ class CartDataExchanger:
 
         """
         if direction is None:
-            MPI.Attach_buffer(buffer)
             recv_requests = []
+            send_requests = []
             for d in range( self._cart.ndim ):
-                recv_requests += self.update_ghost_regions_non_blocking( array, direction=d )
-            return recv_requests
+                r,s = self.update_ghost_regions_non_blocking( array, direction=d )
+                recv_requests += r
+                send_requests += s
+            return recv_requests, send_requests
 
         # Shortcuts
         cart = self._cart
@@ -568,8 +570,8 @@ class CartDataExchanger:
             info     = cart.get_shift_info( direction, disp )
             send_typ = self.get_send_type ( direction, disp )
             send_buf = (array, 1, send_typ)
-            comm.Ibsend( send_buf, info['rank_dest'], tag(disp) )
-            #send_requests.append( send_req )
+            send_req = comm.Isend( send_buf, info['rank_dest'], tag(disp) )
+            send_requests.append( send_req )
 
         # Start receiving data (MPI_IRECV)
         for disp in [-1,1]:
@@ -578,7 +580,7 @@ class CartDataExchanger:
             recv_buf = (array, 1, recv_typ)
             recv_req = comm.Irecv( recv_buf, info['rank_source'], tag(disp) )
             recv_requests.append( recv_req )
-        return recv_requests
+        return recv_requests, send_requests
 
     def wait(self, requests):
         # Wait for end of data exchange (MPI_WAITALL)

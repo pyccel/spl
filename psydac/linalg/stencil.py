@@ -193,19 +193,10 @@ class StencilVector( Vector ):
         assert isinstance( V, StencilVectorSpace )
 
         sizes = [e-s+2*p+1 for s,e,p in zip(V.starts, V.ends, V.pads)]
-        bsizes = [sizes.copy() for i in sizes]
-
-        for i,size in enumerate(bsizes):
-            size[i] = 2*V.pads[i] + 1
-
-        self._sizes  = tuple(sizes)
-        self._ndim   = len(V.starts)
-        self._data   = np.zeros( sizes, dtype=V.dtype )
-
-        if V.parallel:
-            max_size = max([np.prod(size) for size in sizes])
-            self._buffer = np.zeros((max_size, len(V.pads)))
-        self._space  = V
+        self._sizes = tuple(sizes)
+        self._ndim = len(V.starts)
+        self._data  = np.zeros( sizes, dtype=V.dtype )
+        self._space = V
 
         # TODO: distinguish between different directions
         self._sync  = False
