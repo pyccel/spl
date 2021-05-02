@@ -543,13 +543,13 @@ class CartDataExchanger:
 
         """
         if direction is None:
-            requests = []
+            recv_requests = []
+            send_requests = []
             for d in range( self._cart.ndim ):
-                requests += self.update_ghost_regions_non_blocking( array, direction=d )
-            return requests, self._comm.Ibarrier()
-
-        assert isinstance( array, np.ndarray )
-        assert isinstance( direction, int )
+                r,s = self.update_ghost_regions_non_blocking( array, direction=d )
+                recv_requests += r
+                send_requests += s
+            return recv_requests, send_requests
 
         # Shortcuts
         cart = self._cart
@@ -562,7 +562,8 @@ class CartDataExchanger:
         tag = lambda disp: 42+disp
 
         # Requests' handles
-        requests = []
+        recv_requests = []
+        send_requests = []
 
         # Start receiving data (MPI_IRECV)
         for disp in [-1,1]:
@@ -570,7 +571,7 @@ class CartDataExchanger:
             recv_typ = self.get_recv_type ( direction, disp )
             recv_buf = (array, 1, recv_typ)
             recv_req = comm.Irecv( recv_buf, info['rank_source'], tag(disp) )
-            requests.append( recv_req )
+            recv_requests.append( recv_req )
 
         # Start sending data (MPI_ISEND)
         for disp in [-1,1]:
@@ -578,15 +579,12 @@ class CartDataExchanger:
             send_typ = self.get_send_type ( direction, disp )
             send_buf = (array, 1, send_typ)
             send_req = comm.Isend( send_buf, info['rank_dest'], tag(disp) )
-            requests.append( send_req )
-        return requests
+            send_requests.append( send_req )
+        return recv_requests, send_requests
 
     def wait(self, requests):
         # Wait for end of data exchange (MPI_WAITALL)
         MPI.Request.Waitall( requests )
-
-    def barrier(self, barrier_req):
-        MPI.Request.Wait( barrier_req )
     #---------------------------------------------------------------------------
     # Private methods
     #---------------------------------------------------------------------------
