@@ -565,6 +565,14 @@ class CartDataExchanger:
         recv_requests = []
         send_requests = []
 
+        # Start receiving data (MPI_IRECV)
+        for disp in [-1,1]:
+            info     = cart.get_shift_info( direction, disp )
+            recv_typ = self.get_recv_type ( direction, disp )
+            recv_buf = (array, 1, recv_typ)
+            recv_req = comm.Irecv( recv_buf, info['rank_source'], tag(disp) )
+            recv_requests.append( recv_req )
+
         # Start sending data (MPI_ISEND)
         for disp in [-1,1]:
             info     = cart.get_shift_info( direction, disp )
@@ -573,13 +581,6 @@ class CartDataExchanger:
             send_req = comm.Isend( send_buf, info['rank_dest'], tag(disp) )
             send_requests.append( send_req )
 
-        # Start receiving data (MPI_IRECV)
-        for disp in [-1,1]:
-            info     = cart.get_shift_info( direction, disp )
-            recv_typ = self.get_recv_type ( direction, disp )
-            recv_buf = (array, 1, recv_typ)
-            recv_req = comm.Irecv( recv_buf, info['rank_source'], tag(disp) )
-            recv_requests.append( recv_req )
         return recv_requests, send_requests
 
     def wait(self, requests):
