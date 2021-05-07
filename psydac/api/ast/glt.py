@@ -52,15 +52,14 @@ from .nodes             import Zeros
 #==============================================================================
 class GltKernel(SplBasic):
 
-    def __new__(cls, expr, spaces, name=None, mapping=None, is_rational_mapping=None, backend=None, **kwargs):
-
+    def __new__(cls, expr, spaces, name=None, domain=None, mapping=None, is_rational_mapping=None, backend=None, **kwargs):
 
         if isinstance(mapping, IdentityMapping):
             mapping = None
 
         tag = random_string( 8 )
         obj = SplBasic.__new__(cls, tag, name=name,
-                               prefix='kernel', mapping=mapping,
+                               prefix='kernel', domain=domain,mapping=mapping,
                                is_rational_mapping=is_rational_mapping)
 
         obj._expr = expr
@@ -168,6 +167,7 @@ class GltKernel(SplBasic):
     def _initialize(self, **kwargs):
         form    = self.form
         dim     = self.expr.ldim
+        domain  = self.domain
         mapping = self.mapping
 
         # ... discrete values
@@ -183,7 +183,7 @@ class GltKernel(SplBasic):
         expand_expr = kwargs.pop('expand', False)
         # recompute the symbol
         expr = gelatize(form, degrees=degrees, n_elements=n_elements,
-                        mapping=mapping, evaluate=True, human=True, expand=expand_expr)
+                        domain=domain, evaluate=True, human=True, expand=expand_expr)
 
         fields = form.fields
         fields = sorted(fields, key=lambda x: str(x.name))
@@ -427,10 +427,10 @@ class GltKernel(SplBasic):
             for value, array in zip(mapping_elements, mapping_values):
                 body.append(Assign(value, array[indices]))
 
-            jac = TerminalExpr(mapping.det_jacobian, dim=dim, logical=True)
+            jac = TerminalExpr(mapping.det_jacobian, domain.logical_domain)
             jac = SymbolicExpr(jac)
 
-            det_jac = SymbolicExpr(SymbolicDeterminant(mapping))
+            det_jac = SymbolicExpr(SymbolicDeterminant(domain.mapping))
 
             body += [Assign(det_jac, jac)]
         # ...
@@ -570,7 +570,7 @@ class GltKernel(SplBasic):
 
 class GltInterface(SplBasic):
 
-    def __new__(cls, kernel, name=None, mapping=None, is_rational_mapping=None, backend=None, **kwargs):
+    def __new__(cls, kernel, name=None, domain=None, mapping=None, is_rational_mapping=None, backend=None, **kwargs):
 
         if not isinstance(kernel, GltKernel):
             raise TypeError('> Expecting an GltKernel')
@@ -579,7 +579,7 @@ class GltInterface(SplBasic):
             mapping = None
 
         obj = SplBasic.__new__(cls, kernel.tag, name=name,
-                               prefix='interface', mapping=mapping,
+                               prefix='interface', domain=domain, mapping=mapping,
                                is_rational_mapping=is_rational_mapping)
 
         obj._kernel = kernel

@@ -1328,6 +1328,11 @@ class StencilMatrix( Matrix ):
 # TODO [YG, 28.01.2021]:
 # - Check if StencilMatrix should be subclassed
 # - Reimplement magic methods (some are simply copied from StencilMatrix)
+def flip_axis(index, n):
+    s = n-index.start-1
+    e = n-index.stop-1 if n>index.stop else None
+    return slice(s,e,-1)
+
 class StencilInterfaceMatrix(Matrix):
     """
     Matrix in n-dimensional stencil format for an interface.
@@ -1356,7 +1361,7 @@ class StencilInterfaceMatrix(Matrix):
           Padding of the linear operator.
 
     """
-    def __init__( self, V, W, s_d, s_c, dim, pads=None ):
+    def __init__( self, V, W, s_d, s_c, dim, *, flip=None, permutation=None, pads=None ):
 
         assert isinstance( V, StencilVectorSpace )
         assert isinstance( W, StencilVectorSpace )
@@ -1366,17 +1371,20 @@ class StencilInterfaceMatrix(Matrix):
             for p,vp in zip(pads, V.pads):
                 assert p<=vp
 
-        self._pads     = pads or tuple(V.pads)
-        dims           = [e-s+2*p+1 for s,e,p in zip(W.starts, W.ends, W.pads)]
-        dims[dim]      = 3*W.pads[dim] + 1
-        diags          = [2*p+1 for p in self._pads]
-        self._data     = np.zeros( dims+diags, dtype=W.dtype )
-        self._domain   = V
-        self._codomain = W
-        self._dim      = dim
-        self._d_start  = s_d
-        self._c_start  = s_c
-        self._ndim     = len( dims )
+        self._pads        = pads or tuple(V.pads)
+        dims              = [e-s+2*p+1 for s,e,p in zip(W.starts, W.ends, W.pads)]
+        dims[dim]         = 3*W.pads[dim] + 1
+        diags             = [2*p+1 for p in self._pads]
+        self._data        = np.zeros( dims+diags, dtype=W.dtype )
+        self._flip        = [1]*len(dims) if flip is None else flip
+        self._permutation = list(range(len(dims))) if  permutation is None else permutation
+        self._domain      = V
+        self._codomain    = W
+        self._dim         = dim
+
+        self._d_start     = s_d
+        self._c_start     = s_c
+        self._ndim        = len( dims )
 
         # Flag ghost regions as not up-to-date (conservative choice)
         self._sync = False
@@ -1410,23 +1418,25 @@ class StencilInterfaceMatrix(Matrix):
             out = StencilVector( self.codomain )
 
         # Shortcuts
-        ssc   = self.codomain.starts
-        eec   = self.codomain.ends
-        ssd   = self.domain.starts
-        eed   = self.domain.ends
+        sc    = self.codomain.starts
+        ec    = self.codomain.ends
+        sd    = self.domain.starts
+        ed    = self.domain.ends
         dpads = self.domain.pads
         dim   = self.dim
+        flip  = self._flip
+        permutation = self._permutation
 
         c_start = self.c_start
         d_start = self.d_start
         pads    = self.pads
 
         # Number of rows in matrix (along each dimension)
-        nrows        = [ed-s+1 for s,ed in zip(ssd, eed)]
-        nrows_extra  = [0 if ec<=ed else ec-ed for ec,ed in zip(eec,eed)]
+        nrows        = [e-s+1 for s,e in zip(sd, ed)]
+        nrows_extra  = [0 if eci<=edi else eci-edi for eci,edi in zip(ec,ed)]
         nrows[dim]   = self._pads[dim] + 1 - nrows_extra[dim]
 
-        self._dot(self._data, v._data, out._data, nrows, nrows_extra, dpads, pads, dim, d_start, c_start)
+        self._dot(self._data, v._data, out._data, nrows, nrows_extra, dpads, pads, dim, d_start, c_start, flip, permutation)
 
         # IMPORTANT: flag that ghost regions are not up-to-date
         out.ghost_regions_in_sync = False
@@ -1434,17 +1444,20 @@ class StencilInterfaceMatrix(Matrix):
 
     # ...
     @staticmethod
-    def _dot(mat, v, out, nrows, nrows_extra, dpads, pads, dim, d_start, c_start):
+    def _dot(mat, v, out, nrows, nrows_extra, dpads, pads, dim, d_start, c_start, flip, permutation):
         # Index for k=i-j
         ndim = len(v.shape)
         kk = [slice(None)]*ndim
         diff = [xp-p for xp,p in zip(dpads, pads)]
 
         diff[dim] += d_start
+        nn  = v.shape
 
         for xx in np.ndindex( *nrows ):
             ii    = [ p+x for p,x in zip(dpads,xx) ]
-            jj    = tuple( slice(d+x,d+x+2*p+1) for x,p,d in zip(xx,pads,diff) )
+            jj    = [ slice(d+x,d+x+2*p+1) for x,p,d in zip(xx,pads,diff) ]
+            jj    = [flip_axis(i,n) if f==-1 else i for i,f,n in zip(jj,flip,nn)]
+            jj    = tuple(jj[i] for i in permutation)
             ii_kk = tuple( ii + kk )
 
             ii[dim] += c_start
@@ -1463,8 +1476,9 @@ class StencilInterfaceMatrix(Matrix):
 
                     ii     = [x+xp for x,xp in zip(xx, dpads)]
                     ee     = [max(x-l+1,0) for x,l in zip(xx, nrows)]
-                    jj     = tuple( slice(x+d, x+d+2*p+1-e) for x,p,d,e in zip(xx, pads, diff, ee) )
-
+                    jj     = [ slice(x+d, x+d+2*p+1-e) for x,p,d,e in zip(xx, pads, diff, ee) ]
+                    jj     = [flip_axis(i,n) if f==-1 else i for i,f,n in zip(jj, flip, nn)]
+                    jj     = tuple(jj[i] for i in permutation)
                     ndiags = [2*p + 1-e for p,e in zip(pads,ee)]
                     kk     = [slice(None,diag) for diag in ndiags]
                     ii_kk  = tuple( list(ii) + kk )
@@ -1642,8 +1656,11 @@ class StencilInterfaceMatrix(Matrix):
         pp = self.codomain.pads
         nd = len(pp)
         dim = self.dim
-        c_start = self.c_start
-        d_start = self.d_start
+
+        flip       = self._flip
+        permutation =  self._permutation
+        c_start    = self.c_start
+        d_start    = self.d_start
 
         ravel_multi_index = np.ravel_multi_index
 
@@ -1666,9 +1683,12 @@ class StencilInterfaceMatrix(Matrix):
                 ii[dim] += c_start
                 jj[dim] += d_start
 
+                jj = [n-j-1 if f==-1 else j for j,f,n in zip(jj,flip,nc)]
+
+                jj = [jj[i] for i in permutation]
+
                 I = ravel_multi_index( ii, dims=nr, order='C' )
                 J = ravel_multi_index( jj, dims=nc, order='C' )
-
                 rows.append( I )
                 cols.append( J )
                 data.append( value )

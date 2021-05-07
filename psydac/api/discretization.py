@@ -269,6 +269,7 @@ class DiscreteEquation(BasicDiscrete):
 
         #----------------------------------------------------------------------
 
+
         if settings.get('info', False):
             X, info = driver_solve(self.linear_system, **settings)
             uh = FemField(self.trial_space, coeffs=X)
@@ -382,6 +383,7 @@ def discretize_space(V, domain_h, *args, **kwargs):
 
         interiors = [domain_h.domain.interior]
         mappings  = [domain_h.mappings[inter.logical_domain.name] for inter in interiors]
+
         spaces    = [m.space for m in mappings]
         g_spaces  = OrderedDict(zip(interiors, spaces))
 
@@ -505,16 +507,16 @@ def discretize(a, *args, **kwargs):
     if isinstance(a, sym_BasicForm):
         domain_h = args[0]
         assert( isinstance(domain_h, Geometry) )
-        mapping     = domain_h.domain.mapping
+        domain  = domain_h.domain
 
         if isinstance(a, sym_Norm):
-            kernel_expr = TerminalExpr(a)
-            if not mapping is None:
-                kernel_expr = tuple(LogicalExpr(i) for i in kernel_expr)
+            kernel_expr = TerminalExpr(a, domain)
+            if not domain.mapping is None:
+                kernel_expr = tuple(LogicalExpr(i, domain) for i in kernel_expr)
         else:
-            if not mapping is None:
-                a       = LogicalExpr (a)
-            kernel_expr = TerminalExpr(a)
+            if not domain.mapping is None:
+                a       = LogicalExpr (a, domain)
+            kernel_expr = TerminalExpr(a, domain)
 
         if len(kernel_expr) > 1:
             return DiscreteSumForm(a, kernel_expr, *args, **kwargs)
