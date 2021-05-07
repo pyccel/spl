@@ -103,7 +103,7 @@ def run_poisson_2d(solution, f, dir_zero_boundary, dir_nonzero_boundary,
     #+++++++++++++++++++++++++++++++
 
     # Solve linear system
-    uh = equation_h.solve()
+    uh = equation_h.solve(verbose=True)
 
     # Compute error norms
     l2_error = l2norm_h.assemble(u=uh)

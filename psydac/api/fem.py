@@ -846,7 +846,11 @@ class DiscreteSumForm(BasicDiscrete):
         return self._free_args
 
     def assemble(self, **kwargs):
+        print('+' * 50)
+        print(kwargs)
+        print('+' * 50)
         M = self.forms[0].assemble(**kwargs)
+        kwargs['reset'] = False
         for form in self.forms[1:]:
-            M = form.assemble(reset=False, **kwargs)
+            M = form.assemble(**kwargs)
         return M

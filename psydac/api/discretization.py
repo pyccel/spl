@@ -264,8 +264,45 @@ class DiscreteEquation(BasicDiscrete):
                 loc_settings.pop('pc'  , False)
                 uh = equation_h.solve(**loc_settings)
 
-                # Use inhomogeneous solution as initial guess to solver
+#                # Use inhomogeneous solution as initial guess to solver
                 settings['x0'] = uh.coeffs
+
+#                #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#                # NOTE: test
+#                equation_bc = equation
+#
+#                A = self.linear_system.lhs
+#                b = self.linear_system.rhs
+#
+#                equation_bc_h = discretize(equation_bc, domain_h, [Vh, Vh], matrix=A, vector=b)
+#                equation_bc_h.assemble(reset=False)
+#                #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+                A = self.linear_system.lhs
+                b = self.linear_system.rhs
+
+                A_bc = equation_h.linear_system.lhs
+                b_bc = equation_h.linear_system.rhs
+
+                np.set_printoptions(linewidth=300, precision=3)
+                print()
+                print(A[:, :, 0,-1])
+                print(A[:, :, 0, 0])
+                print(A[:, :, 0, 1])
+                print()
+                print(b._data)
+                print()
+                print()
+                print()
+#                print(A_bc[:, :, 0,-1])
+                print(A_bc[:, :, 0, 0])
+#                print(A_bc[:, :, 0, 1])
+                print()
+                print(b_bc._data)
+                print()
+
+#                A += A_bc
+#                b += b_bc
 
         #----------------------------------------------------------------------
 
